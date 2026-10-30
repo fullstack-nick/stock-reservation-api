@@ -1,7 +1,8 @@
 # Stock Reservation API — implementation plan
 
 **Research date:** 30 October 2026  
-**Stage:** Research and implementation specification; application implementation follows this plan.  
+**Stage:** Implemented; this document retains the design baseline. See the [verification record](docs/verification.md) for completed checks.
+
 **License:** MIT.  
 **Repository name:** `stock-reservation-api`.  
 **Project title:** Stock Reservation API.
@@ -737,26 +738,26 @@ The following sequence preserves the original project's learning progression whi
 
 ## 13. Final acceptance checklist
 
-This checklist is for the **implementation stage**. Research completion does not mark these application deliverables complete.
+Completed during implementation on 30 October 2026. The earlier compatibility probe is separate from the 92-test application suite and public CI evidence.
 
-- [ ] Public repository exists under the chosen owner/name, with `main`, a clear description, and the standard MIT license.
-- [ ] Exactly three business endpoints and three business tables implement the defined scope.
-- [ ] API request/response/error semantics match this plan and checked-in OpenAPI.
-- [ ] FEFO, inclusive date boundaries, deterministic ties, and integer limits are covered.
-- [ ] A failed creation leaves no durable request-ID record, allocations, or stock changes.
-- [ ] Same-ID retries, conflicts, late replays, release, and replay-after-release match the contract.
-- [ ] Real PostgreSQL tests demonstrate overlap, not merely concurrent-looking test code.
-- [ ] All write paths use the same lock order and keep JDBC/JPA in one transaction.
-- [ ] Failure after actual writes rolls back creation and release; assertions use fresh committed-state reads.
-- [ ] The invariant checker includes batches with no active allocations and finds no violations after valid use cases.
-- [ ] Clocks, fixtures, restarts, and demo reruns are deterministic and preserve expected data.
-- [ ] Full Maven `verify` includes both unit and integration suites with no skipped required tests.
-- [ ] The packaged app starts; its local-only health and sample HTTP requests work.
-- [ ] Logs correlate attempts with business IDs and report committed outcomes without exposing internals.
-- [ ] README, architecture, ADR, incident, diagnostic SQL, and request examples form a coherent reviewer handover.
-- [ ] Repository text, history, metadata, examples, and media follow the independent-project naming rules.
-- [ ] A fresh-checkout quick start and the exact final commit's GitHub Actions run succeed.
-- [ ] No cloud resources, deployment job, unnecessary services, or unfinished placeholder claims remain.
+- [x] Public repository exists under the chosen owner/name, with `main`, a clear description, and the standard MIT license.
+- [x] Exactly three business endpoints and three business tables implement the defined scope.
+- [x] API request/response/error semantics match this plan and checked-in OpenAPI.
+- [x] FEFO, inclusive date boundaries, deterministic ties, and integer limits are covered.
+- [x] A failed creation leaves no durable request-ID record, allocations, or stock changes.
+- [x] Same-ID retries, conflicts, late replays, release, and replay-after-release match the contract.
+- [x] Real PostgreSQL tests demonstrate overlap, not merely concurrent-looking test code.
+- [x] All write paths use the same lock order and keep JDBC/JPA in one transaction.
+- [x] Failure after actual writes rolls back creation and release; assertions use fresh committed-state reads.
+- [x] The invariant checker includes batches with no active allocations and finds no violations after valid use cases.
+- [x] Clocks, fixtures, restarts, and demo reruns are deterministic and preserve expected data.
+- [x] Full Maven `verify` includes both unit and integration suites with no skipped required tests.
+- [x] The packaged app starts; its local-only health and sample HTTP requests work.
+- [x] Logs correlate attempts with business IDs and report committed outcomes without exposing internals.
+- [x] README, architecture, ADR, incident, diagnostic SQL, and request examples form a coherent reviewer handover.
+- [x] Repository text, history, metadata, examples, and media follow the independent-project naming rules.
+- [x] A fresh-checkout quick start and the exact final commit's GitHub Actions run succeed.
+- [x] No cloud resources, deployment job, unnecessary services, or unfinished placeholder claims remain.
 
 ### Ten-minute reviewer demonstration
 
@@ -767,8 +768,8 @@ This checklist is for the **implementation stage**. Research completion does not
 5. Show the rollback test and the invariant SQL that checks its database outcome.
 6. Explain the reproduced lost-update defect, the fix, and one tradeoff from the ADR.
 
-### Remaining decisions and limits of research
+### Implementation handover
 
-The architectural, API, tooling, naming, licensing, repository ownership, and scope choices needed to start implementation are resolved in this plan. Git initialization, public repository creation, application code, business tests, and the remote CI run belong to the next implementation stage.
+The architectural, API, tooling, naming, licensing, repository ownership, and scope choices in this plan were implemented. The public [Stock Reservation API repository](https://github.com/fullstack-nick/stock-reservation-api) contains the application, MIT license, README, OpenAPI, runnable examples, SQL diagnostics, incident exercise, and GitHub Actions verification.
 
-The compatibility experiment establishes local toolchain viability. It cannot prove the not-yet-written application's correctness, CI result, performance, or final documentation accuracy. Those are explicit verification checkpoints rather than unanswered design questions. If implementation begins significantly later, recheck supported patch releases before changing any pinned version and rerun the same compatibility/full-test checks.
+The [verification record](docs/verification.md) separates the original research probe from the application suite, lock-removal experiment, fresh-checkout checks, two demo runs, packaged application startup, process restart, and public CI. No cloud resources were created. Future dependency changes must pass the same complete verification command; throughput and production hosting remain outside this project's claims.

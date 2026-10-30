@@ -1,5 +1,7 @@
 # Stock Reservation API
 
+[![Verify](https://github.com/fullstack-nick/stock-reservation-api/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/fullstack-nick/stock-reservation-api/actions/workflows/ci.yml)
+
 A Java service that reserves grocery cases from suitable stock batches without allocating the same stock twice. Create a reservation, inspect it, or release it. Batches are chosen by **first expiry, first out (FEFO)**, with durable retries and atomic PostgreSQL transactions.
 
 An independent educational project with fictional inventory. It runs locally and has no cloud deployment.

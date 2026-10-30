@@ -11,7 +11,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
@@ -22,6 +25,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 @Testcontainers
+@ExtendWith(OutputCaptureExtension.class)
 class ReservationRestartIT {
     // The database belongs to JUnit, not either Spring context being restarted.
     @Container static final PostgreSQLContainer DATABASE = new PostgreSQLContainer(TestInfrastructure.POSTGRES_IMAGE);
@@ -30,7 +34,7 @@ class ReservationRestartIT {
             {"externalRequestId":"PERSISTED","sku":"YOGURT-CASE","quantity":9,"requiredOn":"2026-11-02"}
             """;
 
-    @Test void restartPreservesIdentityAllocationsAndDemoStockWithoutReseeding() throws Exception {
+    @Test void restartPreservesIdentityAllocationsAndDemoStockWithoutReseeding(CapturedOutput output) throws Exception {
         JsonNode original;
         try (var first = startApplication()) {
             original = post(first, "/reservations", REQUEST, 201);
@@ -53,11 +57,29 @@ class ReservationRestartIT {
         }
         assertThat(jdbc.queryForList(Files.readString(Path.of("docs/sql/check-invariants.sql")))).isEmpty();
         assertThat(jdbc.queryForObject("select count(*) from reservation_allocation", Integer.class)).isEqualTo(2);
+        // Exercise the documented optional formatter, not just a mock logging appender.
+        var logMapper = JsonMapper.builder().enable(tools.jackson.core.StreamReadFeature.STRICT_DUPLICATE_DETECTION).build();
+        var completions = output.getAll().lines().filter(line -> line.startsWith("{"))
+                .map(logMapper::readTree).filter(event -> "HTTP request completed".equals(event.path("message").asString()))
+                .toList();
+        assertThat(completions).hasSize(5);
+        assertThat(completions).extracting(event -> event.path("status").asInt()).containsExactly(201, 200, 200, 200, 200);
+        assertThat(completions.getFirst().path("outcome").asString()).isEqualTo("CREATED");
+        for (var event : completions) {
+            assertThat(event.path("externalRequestId").asString()).isEqualTo("PERSISTED");
+            assertThat(event.path("reservationId").asString()).isEqualTo(original.path("id").asString());
+            assertThat(java.util.UUID.fromString(event.path("correlationId").asString())).isNotNull();
+        }
+        assertThat(output.getAll()).doesNotContain("failed to append", "Duplicate nested pairs");
     }
 
     private ConfigurableApplicationContext startApplication() {
+        // Other integration classes cache contexts in this JVM. A real process restart has
+        // a fresh logging system; reset its initialization flag before testing that lifecycle.
+        org.springframework.boot.logging.LoggingSystem.get(StockReservationApplication.class.getClassLoader()).cleanUp();
         return SpringApplication.run(StockReservationApplication.class,
                 "--spring.profiles.active=demo", "--server.port=0", "--spring.main.banner-mode=off",
+                "--logging.structured.format.console=ecs",
                 "--spring.datasource.url=" + DATABASE.getJdbcUrl(),
                 "--spring.datasource.username=" + DATABASE.getUsername(),
                 "--spring.datasource.password=" + DATABASE.getPassword());

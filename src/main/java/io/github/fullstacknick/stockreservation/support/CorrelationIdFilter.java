@@ -34,15 +34,12 @@ public class CorrelationIdFilter extends OncePerRequestFilter {
             MDC.put(ATTRIBUTE, correlationId);
             chain.doFilter(request, response);
         } finally {
-            LOG.atInfo().addKeyValue("correlationId", correlationId)
+            // Business identifiers already live in MDC. Repeating them as fluent key/value pairs
+            // makes structured JSON formatters reject duplicate keys.
+            LOG.atInfo()
                     .addKeyValue("method", request.getMethod())
                     .addKeyValue("route", request.getAttribute(HandlerMapping.BEST_MATCHING_PATTERN_ATTRIBUTE))
                     .addKeyValue("status", response.getStatus())
-                    .addKeyValue("externalRequestId", MDC.get("externalRequestId"))
-                    .addKeyValue("reservationId", MDC.get("reservationId"))
-                    .addKeyValue("sku", MDC.get("sku"))
-                    .addKeyValue("quantity", MDC.get("quantity"))
-                    .addKeyValue("outcome", MDC.get("outcome"))
                     .addKeyValue("durationMs", (System.nanoTime() - start) / 1_000_000)
                     .log("HTTP request completed");
             MDC.clear();

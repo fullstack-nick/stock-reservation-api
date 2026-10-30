@@ -42,4 +42,4 @@ reservation:
   transaction-timeout-seconds: 15
 logging:
   pattern:
-    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] %logger{36} - %msg %kvp%n%wEx"
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] %logger{36} - %msg %kvp %mdc%n%wEx"
