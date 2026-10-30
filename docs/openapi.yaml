@@ -1,0 +1,339 @@
+openapi: 3.1.0
+info:
+  title: Stock Reservation API
+  version: 1.0.0
+  description: |
+    Reserve whole cases from one SKU using first-expiry-first-out allocation.
+    Only successful creations establish a durable externalRequestId. An identical replay returns
+    the existing reservation's current state, including after release or after requiredOn has passed.
+    A failed attempt leaves no durable claim. Inventory is fixed during each scenario.
+    This unauthenticated educational service is intended for local use.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local application (demo business date is 2026-11-01)
+security: []
+tags:
+  - name: Reservations
+paths:
+  /reservations:
+    post:
+      tags: [Reservations]
+      operationId: createReservation
+      summary: Create a reservation or replay a successful request
+      description: |
+        All or nothing. Eligible batches have lastUsableOn >= requiredOn and are allocated by
+        lastUsableOn, then batchId, ascending. New requests must have requiredOn >= today in
+        Europe/Berlin (configurable). Replays are recognized before this date rule.
+        Unknown SKUs are treated as having no eligible stock.
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReservation'
+            example:
+              externalRequestId: ORDER-1042-L1
+              sku: YOGURT-CASE
+              quantity: 9
+              requiredOn: '2026-11-02'
+      responses:
+        '201':
+          description: New reservation committed
+          headers:
+            Location:
+              description: Relative resource URI
+              schema: {type: string, example: /reservations/c01ca834-3735-4e14-ab01-ab10edc01bf0}
+            X-Correlation-ID:
+              $ref: '#/components/headers/CorrelationId'
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+              examples:
+                active:
+                  $ref: '#/components/examples/Active'
+        '200':
+          description: Existing reservation returned with no new allocation
+          headers:
+            Location:
+              description: Relative URI of the existing reservation
+              schema: {type: string}
+            X-Correlation-ID:
+              $ref: '#/components/headers/CorrelationId'
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Reservation'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '409':
+          description: INSUFFICIENT_STOCK or REQUEST_ID_CONFLICT; no changes committed
+          headers:
+            X-Correlation-ID:
+              $ref: '#/components/headers/CorrelationId'
+            Cache-Control:
+              $ref: '#/components/headers/NoStore'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '405':
+          $ref: '#/components/responses/HttpContractError'
+        '406':
+          $ref: '#/components/responses/HttpContractError'
+        '415':
+          $ref: '#/components/responses/HttpContractError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /reservations/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ReservationId'
+      - $ref: '#/components/parameters/CorrelationId'
+    get:
+      tags: [Reservations]
+      operationId: getReservation
+      summary: Inspect a reservation and its retained allocation history
+      responses:
+        '200':
+          $ref: '#/components/responses/Reservation'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/HttpContractError'
+        '406':
+          $ref: '#/components/responses/HttpContractError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+  /reservations/{id}/release:
+    parameters:
+      - $ref: '#/components/parameters/ReservationId'
+      - $ref: '#/components/parameters/CorrelationId'
+    post:
+      tags: [Reservations]
+      operationId: releaseReservation
+      summary: Release stock exactly once
+      description: |
+        Send no request body. A nonempty body is invalid. An already released reservation returns
+        its existing release timestamp and original allocations. On-hand stock is unchanged.
+      responses:
+        '200':
+          $ref: '#/components/responses/Reservation'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '405':
+          $ref: '#/components/responses/HttpContractError'
+        '406':
+          $ref: '#/components/responses/HttpContractError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+components:
+  parameters:
+    ReservationId:
+      name: id
+      in: path
+      required: true
+      description: Canonical UUID; malformed values return 400, unknown UUIDs return 404.
+      schema: {type: string, format: uuid}
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: false
+      description: Optional canonical UUID for this HTTP attempt. Invalid or absent values are replaced.
+      schema: {type: string, format: uuid}
+  headers:
+    CorrelationId:
+      description: Selected HTTP-attempt UUID, distinct from the external business request ID
+      schema: {type: string, format: uuid}
+    NoStore:
+      schema: {type: string, const: no-store}
+  schemas:
+    CreateReservation:
+      type: object
+      additionalProperties: false
+      required: [externalRequestId, sku, quantity, requiredOn]
+      properties:
+        externalRequestId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$'
+          description: Case-sensitive durable identity after success; no trimming or normalization.
+        sku:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[A-Z0-9][A-Z0-9_-]{0,63}$'
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 2147483647
+          description: Whole cases. Fractional/exponent tokens and numeric strings are rejected.
+        requiredOn:
+          type: string
+          format: date
+          pattern: '^(?!0000)[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+          description: Real calendar date in years 0001–9999; inclusive last-usable-date requirement.
+    Allocation:
+      type: object
+      additionalProperties: false
+      required: [batchId, lastUsableOn, quantity]
+      properties:
+        batchId: {type: integer, format: int64, minimum: 1}
+        lastUsableOn: {type: string, format: date}
+        quantity: {type: integer, format: int32, minimum: 1, maximum: 2147483647}
+    Reservation:
+      type: object
+      additionalProperties: false
+      required: [id, externalRequestId, sku, quantity, requiredOn, status, createdAt, releasedAt, allocations]
+      properties:
+        id: {type: string, format: uuid}
+        externalRequestId:
+          $ref: '#/components/schemas/CreateReservation/properties/externalRequestId'
+        sku:
+          $ref: '#/components/schemas/CreateReservation/properties/sku'
+        quantity:
+          $ref: '#/components/schemas/CreateReservation/properties/quantity'
+        requiredOn:
+          $ref: '#/components/schemas/CreateReservation/properties/requiredOn'
+        status: {type: string, enum: [ACTIVE, RELEASED]}
+        createdAt:
+          type: string
+          format: date-time
+          description: UTC instant, microsecond precision
+        releasedAt:
+          type: [string, 'null']
+          format: date-time
+          description: Null while active; first release instant remains stable on repeated release.
+        allocations:
+          type: array
+          minItems: 1
+          description: Original allocations, ordered by lastUsableOn then batchId, retained after release.
+          items:
+            $ref: '#/components/schemas/Allocation'
+    Problem:
+      type: object
+      required: [type, title, status, detail, instance, code, correlationId]
+      properties:
+        type: {type: string, format: uri}
+        title: {type: string}
+        status: {type: integer, minimum: 400, maximum: 599}
+        detail: {type: string}
+        instance: {type: string, format: uri-reference}
+        code:
+          type: string
+          enum: [VALIDATION_FAILED, MALFORMED_REQUEST, RESERVATION_NOT_FOUND, NOT_FOUND,
+                 INSUFFICIENT_STOCK, REQUEST_ID_CONFLICT, METHOD_NOT_ALLOWED, NOT_ACCEPTABLE,
+                 UNSUPPORTED_MEDIA_TYPE, TEMPORARILY_UNAVAILABLE, INTERNAL_ERROR]
+        correlationId: {type: string, format: uuid}
+        errors:
+          type: array
+          description: Validation issues sorted by field and message; no rejected values.
+          items:
+            type: object
+            required: [field, message]
+            properties:
+              field: {type: string}
+              message: {type: string}
+  responses:
+    Reservation:
+      description: Reservation in its current committed state
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/CorrelationId'
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Reservation'
+    InvalidRequest:
+      description: VALIDATION_FAILED or MALFORMED_REQUEST; no business effect
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/CorrelationId'
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: RESERVATION_NOT_FOUND
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/CorrelationId'
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    HttpContractError:
+      description: METHOD_NOT_ALLOWED, NOT_ACCEPTABLE, or UNSUPPORTED_MEDIA_TYPE, according to status
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/CorrelationId'
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InternalError:
+      description: INTERNAL_ERROR; internal details are logged, never returned
+      headers:
+        X-Correlation-ID:
+          $ref: '#/components/headers/CorrelationId'
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unavailable:
+      description: TEMPORARILY_UNAVAILABLE. Retry with the same business identity and bounded backoff.
+      headers:
+        Retry-After:
+          schema: {type: string, const: '1'}
+        X-Correlation-ID:
+          $ref: '#/components/headers/CorrelationId'
+        Cache-Control:
+          $ref: '#/components/headers/NoStore'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  examples:
+    Active:
+      value:
+        id: c01ca834-3735-4e14-ab01-ab10edc01bf0
+        externalRequestId: ORDER-1042-L1
+        sku: YOGURT-CASE
+        quantity: 9
+        requiredOn: '2026-11-02'
+        status: ACTIVE
+        createdAt: '2026-11-01T09:00:00Z'
+        releasedAt: null
+        allocations:
+          - {batchId: 101, lastUsableOn: '2026-11-03', quantity: 6}
+          - {batchId: 102, lastUsableOn: '2026-11-06', quantity: 3}
