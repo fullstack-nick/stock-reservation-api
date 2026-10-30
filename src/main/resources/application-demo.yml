@@ -1,0 +1,7 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://127.0.0.1:${DB_PORT:5432}/stock_reservation
+    username: ${DB_USERNAME:stock_reservation}
+    password: ${DB_PASSWORD:local-demo-only}
+  flyway:
+    locations: classpath:db/migration,classpath:db/demo

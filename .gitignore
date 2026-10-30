@@ -1,0 +1,14 @@
+/target/
+.env
+.env.*
+!.env.example
+*.log
+/.idea/
+/.vscode/
+*.iml
+.classpath
+.project
+.settings/
+/data/
+/application-local.*
+.DS_Store
