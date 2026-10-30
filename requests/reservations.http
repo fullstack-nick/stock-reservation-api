@@ -1,0 +1,40 @@
+@baseUrl = http://127.0.0.1:8080
+# Change this value for a new scenario; keep it for a retry.
+@externalRequestId = MANUAL-ORDER-1042-L1
+# Replace with the id from the creation response.
+@reservationId = c01ca834-3735-4e14-ab01-ab10edc01bf0
+
+### Database health
+GET {{baseUrl}}/actuator/health
+
+### Create (201), then send again to replay (200)
+POST {{baseUrl}}/reservations
+Content-Type: application/json
+Accept: application/json
+X-Correlation-ID: 07bd0258-b824-4cc3-9fa9-e4f155879fbe
+
+{
+  "externalRequestId": "{{externalRequestId}}",
+  "sku": "YOGURT-CASE",
+  "quantity": 9,
+  "requiredOn": "2026-11-02"
+}
+
+### Read
+GET {{baseUrl}}/reservations/{{reservationId}}
+Accept: application/json
+
+### Release; send twice to check idempotency. No body.
+POST {{baseUrl}}/reservations/{{reservationId}}/release
+Accept: application/json
+
+### Conflict: same successful identity, changed quantity (409)
+POST {{baseUrl}}/reservations
+Content-Type: application/json
+
+{
+  "externalRequestId": "{{externalRequestId}}",
+  "sku": "YOGURT-CASE",
+  "quantity": 10,
+  "requiredOn": "2026-11-02"
+}
